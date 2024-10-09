@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import Quartz.CoreGraphics as CG
 from threading import Thread, Lock
+import time
 
 
 class ScreenCapture:
@@ -129,3 +130,4 @@ class ScreenCapture:
             self.lock.acquire()
             self.screenshot = screenshot
             self.lock.release()
+            time.sleep(0.050)
