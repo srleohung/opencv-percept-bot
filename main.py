@@ -17,6 +17,7 @@ import pytesseract
 
 # bot
 import pyautogui
+from bot import Bot
 
 # Check if the platform is Windows or macOS (Darwin)
 if platform.system() == "Windows":
@@ -42,6 +43,7 @@ end_point = (0, 0)  # ending point for rectangle
 
 # initialize the ScreenCapture class
 screencap = ScreenCapture(window_name)
+bot = Bot()
 
 def mouseCallback(event, x, y, flags, param):
     # callback function for handling mouse events in the window
@@ -57,14 +59,13 @@ def mouseCallback(event, x, y, flags, param):
     elif event == cv2.EVENT_LBUTTONDOWN:
         if drawing:
             drawing = False
-            image_to_string(start_point, end_point)
+            print_content_from_image_range(start_point, end_point)
         else:
             drawing = True
             start_point = (x, y)
             end_point = (x, y)
 
-
-def image_to_string(start, end):
+def print_content_from_image_range(start, end):
     p1_x, p1_y = start
     p2_x, p2_y = end
     if start[0] > end[0]:
@@ -87,10 +88,13 @@ if args.command == "list_window_names":
     screencap.list_window_names()
 else:
     screencap.start()
+    # bot.start()
     while (True):
 
         if screencap.screenshot is None:
             continue
+
+        bot.update_screenshot(screencap.screenshot)
 
         if DEBUG:
             # calculate FPS
