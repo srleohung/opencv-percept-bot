@@ -1,6 +1,16 @@
 import platform
 import time
 
+# argparse
+import argparse
+
+# initialize the argument parser
+parser = argparse.ArgumentParser(description="A bot that takes screenshots from a window or specific screen area to trigger actions.")
+parser.add_argument("--window_name", help="Specify the name of the window to capture. Leave blank to capture the entire screen.")
+subparsers = parser.add_subparsers(dest="command", help="Available commands")
+subparsers.add_parser("list_window_names", help="List the names of all currently active windows.")
+args = parser.parse_args()
+
 # opencv
 import cv2
 import pytesseract
@@ -11,6 +21,7 @@ import pyautogui
 # Check if the platform is Windows or macOS (Darwin)
 if platform.system() == "Windows":
     from screencapture_windows import ScreenCapture
+    pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
 elif platform.system() == "Darwin":
     from screencapture_macos import ScreenCapture
 
@@ -18,10 +29,10 @@ elif platform.system() == "Darwin":
 # * Properties
 # **************************************************
 DEBUG = True
-window_name = 'Google Chat'
+window_name = args.window_name
 
 # initialize mouse position and FPS variables
-mouse_x, mouse_y = 0, 0
+mouse_pos = (0, 0)
 fps = 0
 frame_count = 0
 start_time = time.time()
@@ -31,19 +42,18 @@ end_point = (0, 0)  # ending point for rectangle
 
 # initialize the ScreenCapture class
 screencap = ScreenCapture(window_name)
-screencap.start()
 
-# callback function for handling mouse events in the window
 def mouseCallback(event, x, y, flags, param):
-    global mouse_x, mouse_y
-    global drawing, start_point, end_point
+    # callback function for handling mouse events in the window
+    global mouse_pos, drawing, start_point, end_point
     # https://steam.oxxostudio.tw/category/python/ai/opencv-mouseevent.html
     if event == cv2.EVENT_MOUSEMOVE:
-        mouse_x, mouse_y = screencap.get_screen_position((x, y))
+        mouse_pos = (x, y)
         if drawing:
             end_point = (x, y)
     elif event == cv2.EVENT_RBUTTONDOWN:
-        pyautogui.moveTo(x=mouse_x, y=mouse_y)
+        x, y = screencap.get_screen_position(mouse_pos)
+        pyautogui.moveTo(x=x, y=y)
     elif event == cv2.EVENT_LBUTTONDOWN:
         if drawing:
             drawing = False
@@ -72,44 +82,50 @@ def image_to_string(start, end):
         print('-------------------------  end  -------------------------')
     return content
 
+# Check which command is provided and take the appropriate action
+if args.command == "list_window_names":
+    screencap.list_window_names()
+else:
+    screencap.start()
+    while (True):
 
-while (True):
+        if screencap.screenshot is None:
+            continue
 
-    if screencap.screenshot is None:
-        continue
+        if DEBUG:
+            # calculate FPS
+            frame_count += 1
+            elapsed_time = time.time() - start_time
+            if elapsed_time > 1.0:
+                fps = frame_count / elapsed_time
+                frame_count = 0
+                start_time = time.time()
 
-    if DEBUG:
-        # calculate FPS
-        frame_count += 1
-        elapsed_time = time.time() - start_time
-        if elapsed_time > 1.0:
-            fps = frame_count / elapsed_time
-            frame_count = 0
-            start_time = time.time()
+            # display the images
+            debug_window_name = f'{window_name} - Viewer'
+            display_image = screencap.screenshot.copy()
+            global_x, global_y = screencap.get_screen_position(mouse_pos)
+            cv2.putText(display_image, f"FPS: {fps:.2f} x: {mouse_pos[0]}({global_x}) y: {mouse_pos[1]}({global_y})",
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (100, 100, 100), 2)
+            if drawing:
+                # ensure start_point and end_point are integers
+                cv2.rectangle(display_image, start_point,
+                            end_point, (100, 100, 100), 1)
+                start_x, start_y = screencap.get_screen_position(start_point)
+                cv2.putText(display_image, f"{start_x}, {start_y}",
+                            start_point, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 100, 100), 2)
+                end_x, end_y = screencap.get_screen_position(end_point)
+                cv2.putText(display_image, f"{end_x}, {end_y}",
+                            end_point, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 100, 100), 2)
 
-        # display the images
-        debug_window_name = f'{window_name} - Viewer'
-        display_image = screencap.screenshot.copy()
-        cv2.putText(display_image, f"FPS: {fps:.2f} x: {mouse_x} y: {mouse_y}",
-                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (100, 100, 100), 2)
-        if drawing:
-            # ensure start_point and end_point are integers
-            cv2.rectangle(display_image, start_point,
-                          end_point, (100, 100, 100), 1)
-            start_x, start_y = screencap.get_screen_position(start_point)
-            cv2.putText(display_image, f"{start_x}, {start_y}",
-                        start_point, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 100, 100), 2)
-            end_x, end_y = screencap.get_screen_position(end_point)
-            cv2.putText(display_image, f"{end_x}, {end_y}",
-                        end_point, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 100, 100), 2)
+            cv2.imshow(debug_window_name, display_image)
+            cv2.setMouseCallback(debug_window_name, mouseCallback)
 
-        cv2.imshow(debug_window_name, display_image)
-        cv2.setMouseCallback(debug_window_name, mouseCallback)
+        # press 'q' with the output window focused to exit.
+        # waits 1 ms every loop to process key presses
+        key = cv2.waitKey(50)
+        if key == ord('q'):
+            screencap.stop()
+            cv2.destroyAllWindows()
+            break
 
-    # press 'q' with the output window focused to exit.
-    # waits 1 ms every loop to process key presses
-    key = cv2.waitKey(50)
-    if key == ord('q'):
-        screencap.stop()
-        cv2.destroyAllWindows()
-        break

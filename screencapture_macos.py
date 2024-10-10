@@ -1,5 +1,4 @@
 import numpy as np
-import cv2
 import Quartz.CoreGraphics as CG
 from threading import Thread, Lock
 import time
