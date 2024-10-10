@@ -107,7 +107,7 @@ class ScreenCapture:
     # translate a pixel position on a screenshot image to a pixel position on the screen.
     # pos = (x, y)
     def get_screen_position(self, pos):
-        return (pos[0] + self.hwnd['kCGWindowBounds']['X'], pos[1] + self.hwnd['kCGWindowBounds']['Y'])
+        return (pos[0] + self.offset_x, pos[1] + self.offset_y)
     
     # **************************************************
     # * Threading Methods
