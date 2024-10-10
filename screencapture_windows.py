@@ -24,7 +24,7 @@ class ScreenCapture:
     offset_y = 0
 
     # constructor
-    def __init__(self, window_name=None):
+    def __init__(self, window_name=None, window_rect=None):
         # create a thread lock object
         self.lock = Lock()
 
@@ -32,6 +32,9 @@ class ScreenCapture:
         # if no window name is given, capture the entire screen
         if window_name is None:
             self.hwnd = win32gui.GetDesktopWindow()
+            # get the window size
+            if window_rect is None:
+                window_rect = win32gui.GetWindowRect(self.hwnd)
         else:
             self.hwnd = self.get_window_by_name(window_name)
             if not self.hwnd:
@@ -39,9 +42,9 @@ class ScreenCapture:
             # account for the window border and titlebar and cut them off
             border_pixels = 8
             titlebar_pixels = 30
+            # get the window size
+            window_rect = win32gui.GetWindowRect(self.hwnd)
 
-        # get the window size
-        window_rect = win32gui.GetWindowRect(self.hwnd)
         self.w = window_rect[2] - window_rect[0]
         self.h = window_rect[3] - window_rect[1]
         

@@ -19,6 +19,7 @@ class Bot:
     stopped = True
     lock = None
     method = None
+    mouse_method = None
     state = None
     screenshot = None
     rectangles = None
@@ -30,11 +31,17 @@ class Bot:
     POSITION_BUY_BUTTON = (-1798, 202) # (281, 831)
     AREA_PRICE_CONTENT = [(274, 658), (392, 683)]
 
-    def __init__(self):
+    def __init__(self, mouse_method=None):
         # create a thread lock object
         self.lock = Lock()
         self.method = cv2.TM_CCOEFF_NORMED
         self.state = BotState.INITIALIZING
+        if mouse_method == "ctypes":
+            import ctypes
+            self.mouse_method = mouse_method
+        elif mouse_method == "pynput":
+            from pynput.mouse import Button, Controller
+            self.mouse_method = mouse_method
 
     # **************************************************
     # * Utility Functions
@@ -97,9 +104,21 @@ class Bot:
     # * Action Functions
     # **************************************************
     def click(self, point, delay=0.250):
-        pyautogui.moveTo(x=point[0], y=point[1])
-        time.sleep(delay)
-        pyautogui.click()
+        if self.mouse_method == 'ctypes':
+            ctypes.windll.user32.SetCursorPos(point[0], point[1])
+            time.sleep(delay)
+            ctypes.windll.user32.mouse_event(2, 0, 0, 0, 0)
+            time.sleep(delay)
+            ctypes.windll.user32.mouse_event(4, 0, 0, 0, 0)
+        elif self.mouse_method == 'pynput':
+            mouse = Controller()
+            mouse.position = (point[0], point[1])
+            time.sleep(delay)
+            mouse.click(Button.left, 1)
+        else:
+            pyautogui.moveTo(x=point[0], y=point[1])
+            time.sleep(delay)
+            pyautogui.click()
     
     def delay(self, seconds=1.000):
         time.sleep(seconds)
