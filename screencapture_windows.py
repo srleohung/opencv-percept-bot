@@ -28,6 +28,9 @@ class ScreenCapture:
         # create a thread lock object
         self.lock = Lock()
 
+        border_pixels = 0
+        titlebar_pixels = 0
+
         # find the handle for the window we want to capture.
         # if no window name is given, capture the entire screen
         if window_name is None:

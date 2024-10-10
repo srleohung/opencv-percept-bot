@@ -36,12 +36,7 @@ class Bot:
         self.lock = Lock()
         self.method = cv2.TM_CCOEFF_NORMED
         self.state = BotState.INITIALIZING
-        if mouse_method == "ctypes":
-            import ctypes
-            self.mouse_method = mouse_method
-        elif mouse_method == "pynput":
-            from pynput.mouse import Button, Controller
-            self.mouse_method = mouse_method
+        self.mouse_method = mouse_method
 
     # **************************************************
     # * Utility Functions
@@ -105,12 +100,14 @@ class Bot:
     # **************************************************
     def click(self, point, delay=0.250):
         if self.mouse_method == 'ctypes':
+            import ctypes
             ctypes.windll.user32.SetCursorPos(point[0], point[1])
             time.sleep(delay)
             ctypes.windll.user32.mouse_event(2, 0, 0, 0, 0)
             time.sleep(delay)
             ctypes.windll.user32.mouse_event(4, 0, 0, 0, 0)
         elif self.mouse_method == 'pynput':
+            from pynput.mouse import Button, Controller
             mouse = Controller()
             mouse.position = (point[0], point[1])
             time.sleep(delay)
