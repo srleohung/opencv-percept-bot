@@ -83,12 +83,27 @@ def print_content_from_image_range(start, end):
         print('-------------------------  end  -------------------------')
     return content
 
+def draw_rectangles(image, rectangles):
+        # these colors are actually BGR
+        line_color = (0, 255, 0)
+        line_type = cv2.LINE_4
+
+        for (x, y, w, h) in rectangles:
+            # determine the box positions
+            top_left = (x, y)
+            bottom_right = (x + w, y + h)
+            # draw the box
+            cv2.rectangle(image, top_left, bottom_right, line_color, lineType=line_type)
+
+        return image
+
+
 # Check which command is provided and take the appropriate action
 if args.command == "list_window_names":
     screencap.list_window_names()
 else:
     screencap.start()
-    # bot.start()
+    bot.start()
     while (True):
 
         if screencap.screenshot is None:
@@ -121,7 +136,8 @@ else:
                 end_x, end_y = screencap.get_screen_position(end_point)
                 cv2.putText(display_image, f"{end_x}, {end_y}",
                             end_point, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 100, 100), 2)
-
+            if bot.rectangles is not None:
+                draw_rectangles(display_image, bot.rectangles)
             cv2.imshow(debug_window_name, display_image)
             cv2.setMouseCallback(debug_window_name, mouseCallback)
 
@@ -130,6 +146,7 @@ else:
         key = cv2.waitKey(50)
         if key == ord('q'):
             screencap.stop()
+            bot.stop()
             cv2.destroyAllWindows()
             break
 
