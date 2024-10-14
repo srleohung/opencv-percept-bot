@@ -6,6 +6,7 @@ from utils import extract_text_from_image
 import pytesseract
 import pyautogui
 from bot import Bot
+from custom_bot import CustomBot
 
 # Setup argument parser
 parser = argparse.ArgumentParser(description="A bot that captures screenshots from a window or specific screen area and triggers actions based on the visual input.")
@@ -37,7 +38,7 @@ end_point = (0, 0)  # Rectangle ending point
 
 # Initialize the screen capture class and bot
 screencap = ScreenCapture(window_name, window_rect)
-bot = Bot()
+bot = CustomBot()
 
 def mouse_callback(event, x, y, flags, param):
     """

@@ -151,28 +151,20 @@ class Bot:
         Handles state transitions and performs actions based on the bot's state,
         such as searching for a template, executing trades, and backtracking.
         """
-        needle_img = None
         while not self.stopped:
             self.wait()  # Wait for a short period before each iteration
 
             if self.state == BotState.INITIALIZING:
-                # Prepare the needle image before starting the search
-                needle_img = cv2.imread('needle.jpg', cv2.IMREAD_UNCHANGED)
-
-                # Transition to the SEARCHING state
+                # Execute initialising logic and then searching
                 self.lock.acquire()
                 self.state = BotState.SEARCHING
                 self.lock.release()
 
             elif self.state == BotState.SEARCHING:
-                # Detect the template in the current screenshot
-                self.rectangles = detect_template_in_image(self.screenshot, template=needle_img)
-
-                # If any template is found, transition to the TRADING state
-                if len(self.rectangles) > 0:
-                    self.lock.acquire()
-                    self.state = BotState.TRADING
-                    self.lock.release()
+                # Execute searching logic and then trading
+                self.lock.acquire()
+                self.state = BotState.TRADING
+                self.lock.release()
 
             elif self.state == BotState.TRADING:
                 # Execute trading logic and then backtrack
