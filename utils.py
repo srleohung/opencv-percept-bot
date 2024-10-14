@@ -99,3 +99,41 @@ def _get_rectangles_from_locations(locations, width, height):
         rectangles.append(rect)
         rectangles.append(rect)  # Adding twice for groupRectangles
     return rectangles
+
+def parse_rectangle_string(rect_string, default=None):
+    """
+    Parse a string into a tuple representing the window rectangle.
+
+    Args:
+        rect_string (str): A string formatted as "x,y,width,height".
+
+    Returns:
+        tuple: A tuple (x, y, width, height) representing the window rectangle.
+    """
+    if rect_string == "":
+        return default
+    try:
+        # Split the string by commas and convert each part to an integer
+        rect_values = tuple(map(int, rect_string.split(',')))
+        if len(rect_values) != 4:
+            raise ValueError("Exactly four values are required.")
+        return rect_values
+    except ValueError as e:
+        raise ValueError(f"Invalid window rectangle format: {e}")
+
+def convert_string_to_boolean(value, default=False):
+    """
+    Convert a string to a boolean value.
+
+    Args:
+        value (str): A string to convert.
+
+    Returns:
+        bool: The converted boolean value.
+    """
+    if value.lower() in ('yes', 'true', 't', '1'):
+        return True
+    elif value.lower() in ('no', 'false', 'f', '0'):
+        return False
+    else:
+        return default  # Return the default value if the string is not recognized

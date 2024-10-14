@@ -2,18 +2,35 @@ import platform
 import time
 import argparse
 import cv2
-from utils import extract_text_from_image
+from utils import extract_text_from_image, parse_rectangle_string, convert_string_to_boolean
 import pytesseract
 import pyautogui
-from bot import Bot
-from custom_bot import CustomBot
+import importlib
+import sys
 
 # Setup argument parser
 parser = argparse.ArgumentParser(description="A bot that captures screenshots from a window or specific screen area and triggers actions based on the visual input.")
 parser.add_argument("--window_name", help="Specify the name of the window to capture. Leave blank to capture the entire screen.")
+parser.add_argument("--window_rect", type=str, help="Specify the rectangle to capture as 'x,y,width,height'.", default="")
+parser.add_argument("--debug", type=str, help="Enable or disable debug mode. Use 'true' or 'false'.", default="true")
+parser.add_argument("--bot", help="Specify the name of the bot to use. Leave blank to use the default bot.")
 subparsers = parser.add_subparsers(dest="command", help="Available commands")
 subparsers.add_parser("list_window_names", help="List the names of all currently active windows.")
 args = parser.parse_args()
+
+# Dynamically import the specified bot module
+if args.bot is None:
+    from bot import Bot
+else:
+    try:
+        module = importlib.import_module(args.bot)
+        Bot = getattr(module, 'Bot')
+    except ModuleNotFoundError:
+        print(f"Error: The module '{args.bot}' does not exist.")
+        sys.exit(1)  # Exit if the module is not found
+    except AttributeError:
+        print(f"Error: The class 'Bot' does not exist in the module '{args.bot}'.")
+        sys.exit(1)  # Exit if the class is not found
 
 # Import platform-specific screen capturing modules
 if platform.system() == "Windows":
@@ -25,9 +42,9 @@ elif platform.system() == "Darwin":
 # **************************************************
 # * Properties and Constants
 # **************************************************
-DEBUG = True  # Enable debug mode for extra logging and visuals
+DEBUG = convert_string_to_boolean(args.debug)  # Enable debug mode for extra logging and visuals
 window_name = args.window_name  # Window name to capture
-window_rect = (0, 0, 560, 1060)  # Default capture area rectangle (left, top, width, height)
+window_rect = parse_rectangle_string(args.window_rect)  # Default capture area rectangle (left, top, width, height)
 mouse_pos = (0, 0)  # Current mouse position
 fps = 0  # Frames per second tracking
 frame_count = 0  # Frame count for FPS calculation
@@ -38,7 +55,7 @@ end_point = (0, 0)  # Rectangle ending point
 
 # Initialize the screen capture class and bot
 screencap = ScreenCapture(window_name, window_rect)
-bot = CustomBot()
+bot = Bot()
 
 def mouse_callback(event, x, y, flags, param):
     """
