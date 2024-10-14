@@ -107,3 +107,7 @@ A Python bot that captures screenshots from a specified window or screen area an
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more information.
+
+## References
+
+This project was inspired by and built upon concepts learned from the [OpenCV Tutorials by LearnCodeByGaming](https://github.com/learncodebygaming/opencv_tutorials). These tutorials offer a comprehensive introduction to using OpenCV for creating game bots and similar applications.
