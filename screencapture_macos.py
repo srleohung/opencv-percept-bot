@@ -6,128 +6,189 @@ import time
 
 
 class ScreenCapture:
+    """
+    A class to capture screenshots from a specific window or the desktop on macOS, 
+    manage screen regions, and handle multi-threaded screenshot capturing.
+
+    Attributes:
+        stopped (bool): Indicates whether the screenshot capturing thread is stopped.
+        lock (threading.Lock): A lock object to synchronize access to the screenshot.
+        screenshot (ndarray): The most recent captured screenshot.
+        w (int): Width of the capture area.
+        h (int): Height of the capture area.
+        hwnd (dict): Handle to the target window for capturing (None for desktop).
+        offset_x (int): X-offset of the window or screen region relative to the screen.
+        offset_y (int): Y-offset of the window or screen region relative to the screen.
+    """
 
     # **************************************************
     # * Threading Properties
     # **************************************************
-    stopped = True
-    lock = None
-    screenshot = None
+    stopped = True  # Flag to control the capturing thread
+    lock = None  # Threading lock to handle concurrent access to screenshot data
+    screenshot = None  # Store the latest screenshot captured by the thread
 
     # **************************************************
-    # * Properties
+    # * Window and Screen Properties
     # **************************************************
-    w = 0
-    h = 0
-    hwnd = None
-    cropped_x = 0
-    cropped_y = 0
-    offset_x = 0
-    offset_y = 0
+    w = 0  # Width of the capture area
+    h = 0  # Height of the capture area
+    hwnd = None  # Handle to the target window (or None for desktop capture)
+    offset_x = 0  # Horizontal offset of the window or screen relative to the display
+    offset_y = 0  # Vertical offset of the window or screen relative to the display
 
-    # constructor
-    def __init__(self, window_name=None):
-        # create a thread lock object
+    def __init__(self, window_name=None, window_rect=None):
+        """
+        Initialize the ScreenCapture object.
+
+        Args:
+            window_name (str, optional): Name of the target window. If None, captures the entire desktop.
+            window_rect (tuple, optional): A tuple representing the window's rectangle coordinates (x1, y1, x2, y2).
+                                            If None, the entire screen is captured.
+
+        Raises:
+            Exception: If the specified window is not found.
+        """
+        # Create a thread lock object for synchronization
         self.lock = Lock()
 
-       # find the handle for the window we want to capture.
-        # if no window name is given, capture the entire screen
         if window_name is None:
-            # Capture the entire screen if no window name is given
+            # Capture the entire screen if no window name is provided
             self.hwnd = None
-            display = CG.CGMainDisplayID()
-            self.w = CG.CGDisplayPixelsWide(display)
-            self.h = CG.CGDisplayPixelsHigh(display)
+            if window_rect is None:
+                # Get the main display's width and height
+                display = CG.CGMainDisplayID()
+                self.w = CG.CGDisplayPixelsWide(display)
+                self.h = CG.CGDisplayPixelsHigh(display)
+                
+                # No offset needed for the full screen capture
+                self.offset_x = 0
+                self.offset_y = 0
+            else:
+                # Set the custom window rectangle size
+                self.w = window_rect[2] - window_rect[0]
+                self.h = window_rect[3] - window_rect[1]
+
+                # Set the cropped coordinates offset for translating positions
+                self.offset_x = window_rect[0]
+                self.offset_y = window_rect[1]
         else:
+            # Capture a specific window by its name
             self.hwnd = self.get_window_by_name(window_name)
             if not self.hwnd:
-                raise Exception('Window not found: {}'.format(window_name))
+                raise Exception(f'Window not found: {window_name}')
 
-            # get the window size
+            # Get the window bounds and set dimensions
             window_bounds = self.hwnd['kCGWindowBounds']
             self.w = window_bounds['Width']
             self.h = window_bounds['Height']
 
-            # macOS typically doesn't require border/titlebar cropping
-            self.cropped_x = 0
-            self.cropped_y = 0
-
-            # set the cropped coordinates offset for translating positions
+            # Set the cropped coordinates offset for translating positions
             self.offset_x = window_bounds['X']
             self.offset_y = window_bounds['Y']
-    
+
     def get_screenshot(self):
-        
-        # if capturing the entire screen
+        """
+        Capture a screenshot of the target window or desktop.
+
+        Returns:
+            ndarray: The captured screenshot as a NumPy array (RGB format).
+        """
+        # Define the rectangle area to capture
+        capture_rect = CG.CGRectMake(self.offset_x, self.offset_y, self.w, self.h)
+
         if self.hwnd is None:
-            screen_rect = CG.CGRectInfinite
-            image = CG.CGWindowListCreateImage(screen_rect, CG.kCGWindowListOptionOnScreenOnly, CG.kCGNullWindowID, CG.kCGWindowImageDefault)
+            # Capture the entire screen
+            image = CG.CGWindowListCreateImage(capture_rect, CG.kCGWindowListOptionOnScreenOnly, CG.kCGNullWindowID, CG.kCGWindowImageDefault)
         else:
-            # capture a specific window
-            window_bounds = self.hwnd['kCGWindowBounds']
-            capture_rect = CG.CGRectMake(window_bounds['X'], window_bounds['Y'], window_bounds['Width'], window_bounds['Height'])
+            # Capture a specific window
             image = CG.CGWindowListCreateImage(capture_rect, CG.kCGWindowListOptionIncludingWindow, int(self.hwnd['kCGWindowNumber']), CG.kCGWindowImageDefault)
 
-        # get image width, height, and pixel data
+        # Get image properties
         width = CG.CGImageGetWidth(image)
         height = CG.CGImageGetHeight(image)
         image_data = CG.CGDataProviderCopyData(CG.CGImageGetDataProvider(image))
 
-        # convert to numpy array
+        # Convert raw image data into a NumPy array
         img = np.frombuffer(image_data, dtype=np.uint8)
 
-        # adjust shape for OpenCV (height, width, 4 channels - RGBA)
+        # Adjust shape for OpenCV (height, width, 4 channels - RGBA)
         img = img.reshape((height, width, 4))
 
-        # drop the alpha channel for OpenCV compatibility (RGBA to RGB)
+        # Drop the alpha channel (RGBA -> RGB) for OpenCV compatibility
         img = img[..., :3]
 
-        # ensure the image is contiguous in memory
+        # Ensure the image is contiguous in memory for OpenCV processing
         img = np.ascontiguousarray(img)
 
         return img
 
-    # get the window by name
     @staticmethod
     def get_window_by_name(window_name):
-        window_list = CG.CGWindowListCopyWindowInfo(
-            CG.kCGWindowListOptionOnScreenOnly, 0)
+        """
+        Get the window handle (hwnd) by the window's name.
+
+        Args:
+            window_name (str): The title of the window.
+
+        Returns:
+            dict: The window information dictionary if found, otherwise None.
+        """
+        window_list = CG.CGWindowListCopyWindowInfo(CG.kCGWindowListOptionOnScreenOnly, 0)
         for window in window_list:
             if 'kCGWindowName' in window and window_name in window['kCGWindowName']:
                 return window
         return None
-    
-    # list the names of all current windows
+
     @staticmethod
     def list_window_names():
+        """
+        List the names of all currently visible windows.
+        """
         window_list = CG.CGWindowListCopyWindowInfo(CG.kCGWindowListOptionOnScreenOnly, 0)
         for window in window_list:
             if 'kCGWindowName' in window and window['kCGWindowName']:
                 print(window['kCGWindowName'])
-    
-    # translate a pixel position on a screenshot image to a pixel position on the screen.
-    # pos = (x, y)
+
     def get_screen_position(self, pos):
+        """
+        Translate a pixel position from a screenshot to the corresponding screen position.
+
+        Args:
+            pos (tuple): A tuple representing the pixel position (x, y) in the screenshot.
+
+        Returns:
+            tuple: The translated position (x, y) on the actual screen.
+        """
         return (pos[0] + self.offset_x, pos[1] + self.offset_y)
-    
+
     # **************************************************
     # * Threading Methods
     # **************************************************
 
     def start(self):
+        """
+        Start a separate thread to continuously capture screenshots in the background.
+        """
         self.stopped = False
         t = Thread(target=self.run)
         t.start()
 
     def stop(self):
+        """
+        Stop the screenshot capturing thread.
+        """
         self.stopped = True
 
     def run(self):
+        """
+        The main loop of the screenshot capturing thread. Continuously captures screenshots
+        until stopped and stores the latest screenshot.
+        """
         while not self.stopped:
-            # get an updated image of the target window screen
             screenshot = self.get_screenshot()
-            # lock the thread while updating the results
+            # Use a lock to safely update the screenshot in a multi-threaded environment
             self.lock.acquire()
             self.screenshot = screenshot
             self.lock.release()
-            time.sleep(0.050)
+            time.sleep(0.050)  # Add a slight delay to control capture rate

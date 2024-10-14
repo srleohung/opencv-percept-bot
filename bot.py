@@ -1,192 +1,187 @@
-import cv2 
+import cv2
 import pyautogui
 import time
 from threading import Thread, Lock
-import pytesseract
-import numpy as np
+from utils import extract_text_from_image, get_rectangle_from_points, detect_template_in_image 
 
 class BotState:
+    """
+    Enumeration to represent the different states of the bot.
+    
+    Attributes:
+        INITIALIZING (int): Initial state of the bot before starting.
+        SEARCHING (int): State when the bot is searching for a target.
+        TRADING (int): State when the bot is performing a trade action.
+        BACKTRACKING (int): State when the bot is resetting and preparing to search again.
+    """
     INITIALIZING = 0
     SEARCHING = 1
     TRADING = 2 
     BACKTRACKING = 3
 
 class Bot:
+    """
+    A bot class for automating game actions using screen detection and automation tools.
+
+    The bot performs actions in a loop, switching between different states (INITIALIZING, SEARCHING, TRADING, BACKTRACKING),
+    based on its current environment, detected via screenshots and template matching.
+
+    Attributes:
+        stopped (bool): Flag to control the main loop of the bot.
+        lock (threading.Lock): A lock to handle shared resources (e.g., screenshots) safely.
+        state (BotState): Current state of the bot.
+        screenshot (ndarray): Latest screenshot of the screen.
+        rectangles (list): List of rectangles where detected templates are found.
+    """
 
     # **************************************************
     # * Threading Properties
     # **************************************************
-    stopped = True
-    lock = None
-    method = None
-    mouse_method = None
-    state = None
-    screenshot = None
-    rectangles = None
+    stopped = True  # Control the bot's running state
+    lock = None  # Lock to manage concurrent access to shared resources
+    state = None  # Current state of the bot
+    screenshot = None  # Latest screenshot data
+    rectangles = None  # List of detected rectangles on the screenshot
 
-    # **************************************************
-    # * Properties
-    # **************************************************
-    POSITION_CLOSE_BUTTON = (-1798, 22) # (513, 193)
-    POSITION_BUY_BUTTON = (-1798, 202) # (281, 831)
-    AREA_PRICE_CONTENT = [(274, 658), (392, 683)]
-
-    def __init__(self, mouse_method=None):
-        # create a thread lock object
+    def __init__(self):
+        """
+        Initializes the bot with a default state of INITIALIZING.
+        """
+        # Create a thread lock object for safe multi-threaded access
         self.lock = Lock()
-        self.method = cv2.TM_CCOEFF_NORMED
         self.state = BotState.INITIALIZING
-        self.mouse_method = mouse_method
 
     # **************************************************
     # * Utility Functions
     # **************************************************
-    def image_to_string(self, start, end):
-        p1_x, p1_y = start
-        p2_x, p2_y = end
-        if start[0] > end[0]:
-            p1_x = end[0]
-            p2_x = start[0]
-        if start[1] > end[1]:
-            p1_y = end[1]
-            p2_y = start[1]
-        cropped_screenshot = self.screenshot[p1_y:p2_y, p1_x:p2_x]
-        content = pytesseract.image_to_string(cropped_screenshot)
+
+    def extract_text_from_area(self, points):
+        """
+        Extract textual content from a specific region in the screenshot.
+
+        Args:
+            points (tuple): A tuple containing two points (top-left and bottom-right) that define the area of the screenshot.
+
+        Returns:
+            str: The extracted text from the image in the specified region.
+        """
+        content = extract_text_from_image(self.screenshot, points[0], points[1])
+        self.rectangles = [get_rectangle_from_points(points[0], points[1])]
         return content
 
-    def get_integer_from_image(self, points):
-        content = self.image_to_string(points[0], points[1])
+    def extract_integer_from_area(self, points):
+        """
+        Extract an integer value from a specific region in the screenshot.
+
+        Args:
+            points (tuple): A tuple containing two points (top-left and bottom-right) that define the area of the screenshot.
+
+        Returns:
+            int: The extracted integer from the image in the specified region.
+                 Returns 0 if no valid integer is found.
+        """
+        content = extract_text_from_image(self.screenshot, points[0], points[1])
+        self.rectangles = [get_rectangle_from_points(points[0], points[1])]
+        number_string = content.replace(',', '').replace(' ', '').replace('.', '')
         try:
-            return int(content)
+            return int(number_string)
         except ValueError:
-            print("Price not found in range")
+            print(f'Integer not found in range, content: {number_string}')
             return 0
-        
-    def find_in_image(self, image, needle_img=None, needle_img_path=None, threshold=0.8):
-        
-        if needle_img is None:
-            needle_img = cv2.imread(needle_img_path, cv2.IMREAD_UNCHANGED)
-
-        # run the OpenCV algorithm
-        result = cv2.matchTemplate(image, needle_img, self.method)
-
-        # Get the all the positions from the match result that exceed our threshold
-        locations = np.where(result >= threshold)
-        locations = list(zip(*locations[::-1]))
-
-        # You'll notice a lot of overlapping rectangles get drawn. We can eliminate those redundant
-        # locations by using groupRectangles().
-        # First we need to create the list of [x, y, w, h] rectangles
-        rectangles = []
-        for loc in locations:
-            rect = [int(loc[0]), int(loc[1]), needle_img.shape[1], needle_img.shape[0]]
-            # Add every box to the list twice in order to retain single (non-overlapping) boxes
-            rectangles.append(rect)
-            rectangles.append(rect)
-            
-        # Apply group rectangles.
-        # The groupThreshold parameter should usually be 1. If you put it at 0 then no grouping is
-        # done. If you put it at 2 then an object needs at least 3 overlapping rectangles to appear
-        # in the result. I've set eps to 0.5, which is:
-        # "Relative difference between sides of the rectangles to merge them into a group."
-        rectangles, weights = cv2.groupRectangles(rectangles, groupThreshold=1, eps=0.5)
-        
-        self.rectangles = rectangles
-        
-        return rectangles
 
     # **************************************************
     # * Action Functions
     # **************************************************
-    def click(self, point, delay=0.250):
-        if self.mouse_method == 'ctypes':
-            import ctypes
-            ctypes.windll.user32.SetCursorPos(point[0], point[1])
-            time.sleep(delay)
-            ctypes.windll.user32.mouse_event(2, 0, 0, 0, 0)
-            time.sleep(delay)
-            ctypes.windll.user32.mouse_event(4, 0, 0, 0, 0)
-        elif self.mouse_method == 'pynput':
-            from pynput.mouse import Button, Controller
-            mouse = Controller()
-            mouse.position = (point[0], point[1])
-            time.sleep(delay)
-            mouse.click(Button.left, 1)
-        else:
-            pyautogui.moveTo(x=point[0], y=point[1])
-            time.sleep(delay)
-            pyautogui.click()
-    
-    def delay(self, seconds=1.000):
+
+    def click(self, point, delay=0.100):
+        """
+        Simulate a mouse click at a given point on the screen.
+
+        Args:
+            point (tuple): A tuple representing the (x, y) coordinates of the point to click.
+            delay (float, optional): Time to wait before clicking (default is 0.100 seconds).
+        """
+        pyautogui.moveTo(x=point[0], y=point[1])
+        time.sleep(delay)
+        pyautogui.click()
+
+    def wait(self, seconds=1.000):
+        """
+        Pause execution for a given number of seconds.
+
+        Args:
+            seconds (float, optional): The number of seconds to wait (default is 1.000 seconds).
+        """
         time.sleep(seconds)
 
     # **************************************************
     # * Threading Methods
     # **************************************************
+
     def update_screenshot(self, screenshot):
+        """
+        Update the current screenshot safely in a multi-threaded environment.
+
+        Args:
+            screenshot (ndarray): The new screenshot to update.
+        """
         self.lock.acquire()
         self.screenshot = screenshot
         self.lock.release()
 
     def start(self):
+        """
+        Start the bot in a separate thread.
+        """
         self.stopped = False
         t = Thread(target=self.run)
         t.start()
 
     def stop(self):
+        """
+        Stop the bot's operation.
+        """
         self.stopped = True
 
-    # main logic controller
+    # Main logic controller
     def run(self):
+        """
+        The main loop of the bot, executing its logic based on the current state.
+        
+        Handles state transitions and performs actions based on the bot's state,
+        such as searching for a template, executing trades, and backtracking.
+        """
         needle_img = None
         while not self.stopped:
-            self.delay()
-            if self.state == BotState.INITIALIZING:
-                # prepare the needle image before starting
-                # needle_img = cv2.imread('needle.jpg', cv2.IMREAD_UNCHANGED)
+            self.wait()  # Wait for a short period before each iteration
 
-                # start searching when the waiting period is over
+            if self.state == BotState.INITIALIZING:
+                # Prepare the needle image before starting the search
+                needle_img = cv2.imread('needle.jpg', cv2.IMREAD_UNCHANGED)
+
+                # Transition to the SEARCHING state
                 self.lock.acquire()
                 self.state = BotState.SEARCHING
                 self.lock.release()
 
             elif self.state == BotState.SEARCHING:
-                # find item or button from image using needle image
-                # self.find_in_image(self.screenshot, needle_img)
+                # Detect the template in the current screenshot
+                self.rectangles = detect_template_in_image(self.screenshot, template=needle_img)
 
-                # automatically click the button to flow to the target page and execute the following session
-                self.click(self.POSITION_BUY_BUTTON)
-                
-                # if the price is below 10,000, go to the trading session
-                price = 0 # self.get_integer_from_image(self.AREA_PRICE_CONTENT)
-                if price > 0 and price < 10000:
+                # If any template is found, transition to the TRADING state
+                if len(self.rectangles) > 0:
                     self.lock.acquire()
                     self.state = BotState.TRADING
                     self.lock.release()
-                else:
-                    self.lock.acquire()
-                    self.state = BotState.BACKTRACKING
-                    self.lock.release()
 
             elif self.state == BotState.TRADING:
-
-                self.click(self.POSITION_BUY_BUTTON)
-
+                # Execute trading logic and then backtrack
                 self.lock.acquire()
                 self.state = BotState.BACKTRACKING
                 self.lock.release()
 
             elif self.state == BotState.BACKTRACKING:
-
-                # automatically click the button to back to the original page for subsequent sessions
-                self.click(self.POSITION_CLOSE_BUTTON)
-
+                # Reset to searching after backtracking
                 self.lock.acquire()
                 self.state = BotState.SEARCHING
                 self.lock.release()
-                
-
-
-
-
-
