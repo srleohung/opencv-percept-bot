@@ -2,7 +2,7 @@ from bot import BotState, Bot
 import cv2
 from utils import detect_template_in_image 
 
-class CustomBot(Bot):
+class Bot(Bot):
     """
     A custom bot class that inherits from the Bot class,
     allowing for specific modifications to the run method.
